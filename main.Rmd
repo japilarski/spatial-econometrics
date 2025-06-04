@@ -1,0 +1,440 @@
+---
+title: "Ekonometria Przestrzenna Projekt"
+author: ""
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    toc_depth: 2
+    highlight: tango
+    theme: paper
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = FALSE,
+  warning = FALSE,
+  message = FALSE,
+  fig.align='center'
+)
+```
+
+```{r include=FALSE}
+library(spdep)
+library(sf)
+library(tmap)
+library(rnaturalearth)
+library(dplyr)
+library(psych)
+library(knitr)
+library(kableExtra)
+
+dane <- read.csv("growthley.csv", sep = ",")  # lub sep = "," zależnie od formatu
+dane$gdp_growth_1960_1980 <- dane$gdp_growth_1960_1980 / 100
+dane$GDPsh560 <- dane$GDPsh560
+dane$NEquip_Inv <- dane$NEquip_Inv * 100
+
+coords <- cbind(dane$longitude, dane$latitude)
+neighbors <- dnearneigh(coords, 0, 20)
+weights <- nb2listw(neighbors, style = "W", zero.policy = TRUE)
+```
+
+``` {r }
+
+```
+
+
+# Wstęp
+
+# Problem badawczy
+
+# Przegląd literatury
+
+# Opis danych
+## Zmienna zależna
+``` {r zmienna_zalezna}
+world <- ne_countries(scale = "medium", returnclass = "sf")
+world_merged <- world %>%
+  left_join(dane, by = c("name" = "country_name"))
+
+tmap_mode("view")
+tm_shape(world_merged) +
+  tm_polygons("gdp_growth_1960_1980", 
+              palette = "RdBu", 
+              title = "Średni wzrost PKB w latach 1960-1980") +
+  tm_layout(legend.outside = TRUE)
+
+```
+
+
+## Zmienne objaśniające
+
+### Zmienne ilościowe
+Life_Exp
+Średnia długość życia — przeciętna liczba lat, jaką statystycznie oczekuje się, że przeżyje osoba urodzona w danym kraju. Wysoka wartość zwykle wskazuje na lepszy poziom zdrowia i warunki życia.
+
+NEquip_Inv
+Procent wydatków innych niż w środki trwałe, np. w kapitał ludzki, infrastrukturę społeczną.
+
+Rule_of_Law
+Indeks praworządności — mierzy stopień przestrzegania prawa, stabilność systemu prawnego oraz skuteczność wymiaru sprawiedliwości w danym kraju. Wyższe wartości oznaczają lepszą jakość instytucji i często korelują z wyższym rozwojem gospodarczym.
+
+GDPsh560
+Ilościowa zmienna ciągła wyrażająca logarytm naturalny PKB per capita w roku 1960. Wartości tej zmiennej odzwierciedlają poziom zamożności krajów w początkowym roku analizy. Dzięki logarytmicznej transformacji możliwe jest zmniejszenie wpływu wartości odstających oraz uzyskanie bardziej symetrycznego rozkładu, co sprzyja modelowaniu regresyjnemu. Wysokie wartości GDPsh560 oznaczają wyższy poziom dochodu per capita w 1960 r., co może mieć wpływ na tempo późniejszego rozwoju gospodarczego.
+
+### Zmienna jakościowa
+SubSahara
+Zmienna binarna oznaczająca, czy kraj znajduje się w regionie Afryki Subsaharyjskiej. Wpływa na analizę regionalną i często wiąże się z charakterystycznymi wyzwaniami gospodarczymi i społecznymi.
+
+
+### Wybrane kartogramy
+``` {r kartogramy}
+tm_shape(world_merged) +
+  tm_polygons("Life_Exp", 
+              palette = "Blues", 
+              title = "Średnia przewidywana długość życia") +
+  tm_layout(legend.outside = TRUE)
+
+tm_shape(world_merged) +
+  tm_polygons("Rule_of_Law", 
+              palette = "Blues", 
+              title = "Wskaźnik jakości rządów prawa") +
+  tm_layout(legend.outside = TRUE)
+
+tm_shape(world_merged) +
+  tm_polygons("NEquip_Inv", 
+              palette = "Blues", 
+              title = "Wydatki inne niż w środki trwałe") +
+  tm_layout(legend.outside = TRUE)
+
+tm_shape(world_merged) +
+  tm_polygons("GDPsh560", 
+              palette = "Blues", 
+              title = "Logarytm naturalny PKB per capita w roku 1960") +
+  tm_layout(legend.outside = TRUE)
+
+```
+
+## Macierz wag przestrzennych
+
+W niniejszym rozdziale przedstawiono sposób konstrukcji macierzy wag przestrzennych, która odgrywa kluczową rolę w analizach przestrzennych. Została ona oparta na relacjach sąsiedztwa pomiędzy krajami uwzględnionymi w zbiorze danych. W pierwszej kolejności utworzono reprezentację przestrzenną krajów w postaci punktów z przypisanymi współrzędnymi geograficznymi. Następnie określono, które kraje są sobie geograficznie bliskie i mogą być traktowane jako sąsiedzi — na tej podstawie zbudowano graf sąsiedztwa.
+
+``` {r graf_sasiedztwa}
+library(sf)
+library(sp)
+library(spdep)
+library(tmap)
+library(tmaptools)
+library(rnaturalearth)
+library(rnaturalearthdata)
+
+world <- ne_countries(scale = "medium", returnclass = "sf")
+coords_sf <- st_as_sf(dane, coords = c("longitude", "latitude"), crs = 4326)
+lines_list <- nb2lines(neighbors, coords = sp::coordinates(as_Spatial(coords_sf)), 
+                       proj4string = CRS("+proj=longlat +datum=WGS84"))
+lines_sf <- st_as_sf(lines_list)
+tmap_mode("plot")
+tm_shape(world) +
+  tm_borders() +
+  tm_shape(lines_sf) +
+  tm_lines(col = "red", lwd = 1) +
+  tm_shape(coords_sf) +
+  tm_dots(col = "blue", size = 0.1) +
+  tm_layout(legend.show = FALSE)
+
+```
+
+Wizualizacja mapy z naniesionym grafem umożliwia szybkie zrozumienie układu przestrzennego i potencjalnych zależności między obserwacjami. Na mapie przedstawiono zarówno lokalizacje krajów, jak i połączenia między nimi oznaczające relacje sąsiedztwa.
+
+``` {r fragment_macierzy_wag}
+W_matrix <- as.matrix(listw2mat(weights))
+
+rownames(W_matrix) <- dane$country_name
+colnames(W_matrix) <- dane$country_name
+
+W_matrix_subset <- W_matrix[14:19, 14:19]
+
+kable(W_matrix_subset, caption = "Fragment macierzy wag przestrzennych", digits = 2) %>%
+  kable_styling(bootstrap_options = "condensed", font_size = 10)
+```
+
+Na podstawie tak zdefiniowanych relacji przestrzennych skonstruowano macierz wag przestrzennych, która informuje, które kraje wpływają na siebie nawzajem w analizie. Dla czytelności przedstawiono jej fragment w formie tabelarycznej. Dodatkowo zaprezentowano tabelę z przypisanymi sąsiadami dla wybranych krajów, co ułatwia interpretację powiązań przestrzennych.
+
+``` {r tabela_sasiadow}
+library(tibble)
+library(tidyr)
+
+neighbors_df <- tibble(
+  country = dane$country_name,
+  neighbors = sapply(neighbors, function(n) paste(dane$country_name[n], collapse = ", "))
+)
+
+# Piękna tabela
+library(knitr)
+library(kableExtra)
+
+kable(head(neighbors_df, 10), caption = "Lista sąsiadów dla każdego kraju") %>%
+  kable_styling(bootstrap_options = c("striped", "hover"), full_width = FALSE)
+
+```
+
+# Analiza opisowa
+## Zmienne ilościowe
+``` {r }
+stats <- describe(dane[, c(
+  "Life_Exp",
+  "GDPsh560",
+  "NEquip_Inv",
+  "Rule_of_Law"
+)])
+stats_selected <- stats[, c("mean", "sd", "min", "median", "max")]
+opisy <- c(
+  Life_Exp = "Oczekiwana długość życia",
+  GDPsh560 = "Logarytm naturalny PKB per capita w roku 1960",
+  NEquip_Inv = "Procent wydatków innych niż w środki trwałe",
+  Rule_of_Law = "Jakość rządów prawa"
+)
+
+stats_selected$Zmienna <- opisy[rownames(stats_selected)]
+stats_selected <- stats_selected[, c("Zmienna", setdiff(names(stats_selected), "Zmienna"))]
+kable(stats_selected, 
+      caption = "Podstawowe statystyki opisowe wybranych zmiennych",
+      digits = 0,
+      col.names = c("Zmienna", "Średnia", "Odchylenie standardowe", "Minimum", "Mediana", "Maksimum"),
+      row.names = FALSE) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), 
+                full_width = FALSE, 
+                position = "center")
+```
+Analiza opisowa wybranych zmiennych ilościowych przedstawia ogólny obraz różnic społeczno - gospodarczych w badanych krajach.
+
+Oczekiwana długość życia wynosi średnio prawie 57 lat, przy odchyleniu standardowym równym 11,39. Wartości wahają się od 37,90 do 73,40 lat, co wskazuje na znaczne zróżnicowanie w poziomie zdrowia publicznego i warunkach życia w analizowanych państwach.
+
+Średni udział inwestycji innych niż w środki trwałe wynosi 14,94%, z zakresem od 3,71% do 28,03% i umiarkowanym odchyleniem standardowym na poziomie 5,48. Mediana równa 14,75% sugeruje względnie symetryczny rozkład tej zmiennej.
+
+
+Ostatnia zmienna – jakość rządów prawa – mierzona w skali od 0 do 1, ma średnią wartość 0,54 i medianę 0,50. To świadczy o umiarkowanym, lecz wyraźnym zróżnicowaniu w zakresie instytucjonalnym pomiędzy badanymi krajami.
+
+### Histogramy
+
+Histogramy czterech zmiennych ilościowych zawartych w zbiorze danych („Life_Exp”, „GDPsh560”, „NEquip_Inv” oraz „Rule_of_Law”) ujawniają istotne cechy rozkładu danych i pozwalają lepiej zrozumieć ich strukturę.
+
+``` {r wykresy}
+library(ggplot2)
+library(gridExtra)
+
+vars <- c("Life_Exp", "GDPsh560", "NEquip_Inv", "Rule_of_Law")
+histograms <- lapply(vars, function(var) {
+  ggplot(dane, aes_string(x = var)) +
+    geom_histogram(bins = 20, fill = "#69b3a2", color = "white", alpha = 0.8) +
+    theme_minimal() +
+    labs(x = var, y = "Liczba obserwacji")
+})
+
+# Wyświetlenie wszystkich histogramów w siatce 2x2
+do.call(grid.arrange, c(histograms, ncol = 2))
+```
+
+
+
+Zmienna Life_Exp (oczekiwana długość życia) wykazuje rozkład wielomodalny — widać wyraźne skupiska obserwacji w okolicach 45–50 oraz 65–70 lat. Sugeruje to, że dane mogą pochodzić z krajów o bardzo zróżnicowanym poziomie rozwoju, przy czym kraje rozwinięte i rozwijające się tworzą odrębne grupy pod względem długości życia.
+
+Zmienna GDPsh560, czyli logarytm PKB per capita z 1960 roku, ma rozkład zbliżony do normalnego, chociaż z lekką lewostronną skośnością. Większość obserwacji skupia się w przedziale 7–8, co może oznaczać, że znaczna liczba krajów miała umiarkowany poziom dochodu, a jedynie niewielka liczba krajów cechowała się bardzo niskim PKB.
+
+W przypadku zmiennej NEquip_Inv (procent wydatków innych niż w środki trwałe) rozkład jest rozproszony, z wyraźnym skupiskiem między 10 a 20 procentami. Występuje delikatna prawostronna skośność, co może mieć znaczenie przy dalszym modelowaniu — w razie potrzeby warto rozważyć transformację tej zmiennej.
+
+Ostatnia zmienna, Rule_of_Law (wskaźnik rządów prawa), ma wyraźnie skośny rozkład, z dużą liczbą obserwacji skupionych na wartościach 0 i 1. Może to sugerować, że wskaźnik ten przyjmuje w praktyce charakter quasi-dyskretny, co odzwierciedla skrajne różnice w poziomie jakości instytucji między krajami.
+
+Na podstawie tej analizy można stwierdzić, że zmienne reprezentują różnorodne rozkłady, co może mieć wpływ na dalsze analizy statystyczne i modelowanie ekonometryczne. 
+
+
+### Wykresy gęstości
+
+``` {r}
+library(ggplot2)
+library(tidyr)
+library(dplyr)
+
+# Przekształcenie danych do formatu długiego
+dane_long <- dane %>%
+  select(Life_Exp, GDPsh560, NEquip_Inv, Rule_of_Law) %>%
+  pivot_longer(cols = everything(), names_to = "Zmienna", values_to = "Wartość")
+
+# Wykres gęstości bez legendy
+ggplot(dane_long, aes(x = Wartość, fill = Zmienna)) +
+  geom_density(alpha = 0.6) +
+  facet_wrap(~Zmienna, scales = "free") +
+  labs(title = "Wykresy gęstości dla zmiennych ilościowych",
+       x = "Wartość", y = "Gęstość") +
+  theme_minimal() +
+  theme(legend.position = "none")
+```
+
+Wykresy gęstości przedstawiają rozkład czterech zmiennych ilościowych w zbiorze danych.
+Zmienna Life_Exp prezentuje rozkład dwumodalny, w próbie występują dwie grupy krajów o wyraźnie różnych długościach życia.
+Dla GDPsh560 widzimy rozkład lekko asymetryczny z przewagą krajów o średnich wartościach logarytmu PKB. Wskazuje na nierównomierny poziom rozwoju gospodarczego.
+Z kolei rozkład NEquip_Inv jest zbliżony do normalnego, wskazujący na względnie równomierne rozłożenie wartości w próbie.
+Zmienna Rule_of_Law prezentuje rozkład zbliżony do dwumodalnego, sugeruje pewne zróżnicowanie między krajami pod względem siły rządów prawa, z koncentracją przy niskich i wysokich wartościach.
+
+### Korelacja zmiennych ilościowych 
+
+``` {r korelacja}
+library(knitr)
+library(kableExtra)
+
+vars <- c("Life_Exp", "GDPsh560", "NEquip_Inv", "Rule_of_Law")
+dane_sub <- dane[, vars]
+
+cor_matrix <- cor(dane_sub, method = "pearson", use = "complete.obs")
+
+kable(cor_matrix, digits = 3, caption = "Macierz korelacji") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = F)
+```
+
+Analiza macierzy korelacji wykazała istotne powiązania między badanymi zmiennymi ilościowymi. Oczekiwana długość życia (Life_Exp) jest silnie skorelowana dodatnio z PKB per capita (GDPsh560) oraz wskaźnikiem praworządności (Rule_of_Law), odpowiednio na poziomie 0,859 oraz 0,711. Oznacza to, że wyższy poziom dochodu na mieszkańca oraz lepsza jakość instytucji i rządów są związane z dłuższą średnią długością życia ludności.
+Udział wydatków innych niż na środki trwałe, takich jak inwestycje w kapitał ludzki czy infrastrukturę społeczną (NEquip_Inv), wykazuje umiarkowaną dodatnią korelację z oczekiwaną długością życia (0,456) oraz umiarkowane powiązania z pozostałymi zmiennymi. Sugeruje to, że tego typu nakłady również mają pozytywny wpływ na warunki życia, choć związek ten jest słabszy niż w przypadku PKB czy praworządności.
+Podsumowując, wyniki potwierdzają, że poziom dochodu oraz stan instytucji są silnie powiązane a jakością życia, a inwestycje w kapitał ludzki i infrastrukturę społeczną również mogą wspierać poprawę warunków życia, choć w mniejszym stopniu.
+
+## Zmienna jakościowa
+
+``` {r }
+dane %>%
+  count(SubSahara) %>%
+  mutate(
+    Kategoria = ifelse(SubSahara == 1, "Tak (Afryka Subsaharyjska)", "Nie"),
+    Procent = round(n / sum(n) * 100, 2)
+  ) %>%
+  select(Kategoria, Liczba = n, Procent) %>%
+  kable(
+    caption = "Rozkład zmiennej SubSahara",
+    col.names = c("Kategoria", "Liczba obserwacji", "Procent"),
+    align = "lrr"
+  ) %>%
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed"),
+    full_width = FALSE,
+    position = "center"
+  )
+```
+Zmienna SubSahara dzieli analizowane państwa na dwie grupy: należące do regionu Afryki Subsaharyjskiej (1) oraz pozostałe (0). W zestawieniu danych:
+80,6% państw (54 obserwacje) nie należy do Afryki Subsaharyjskiej, natomiast 19,4% państw (13 obserwacji) pochodzi z tego regionu.
+Taki rozkład wskazuje na znaczną przewagę państw spoza Afryki Subsaharyjskiej w analizowanej próbie, co warto uwzględnić przy interpretacji wyników modeli przestrzennych czy statystyk opisowych. 
+
+
+
+### zmienne jakościowe
+``` {r zmienne_jakosc}
+```
+
+# Eksploracyjna analiza danych przestrzennych 
+
+## Test Moran I
+
+W celu sprawdzenia istnienia przestrzennej autokorelacji tempa wzrostu PKB per capita w latach 1960–1980 przeprowadzono test Morana. Test ten pozwala ocenić, czy wartości analizowanej zmiennej wykazują tendencję do grupowania się przestrzennie — czyli czy kraje o podobnych wartościach wzrostu PKB sąsiadują ze sobą częściej, niż wynikałoby to z przypadku.
+
+``` {r moran_I_test}
+moran_result <- moran.test(dane$gdp_growth_1960_1980, weights, zero.policy = TRUE)
+```
+
+Wynik testu Morana dla zmiennej gdp_growth_1960_1980 wyniósł I = 0.664, przy oczekiwanej wartości statystyki pod hipotezą braku autokorelacji równej –0.016 oraz bardzo niskim poziomie wartości p (< 2.2e-16). Tak wysoka wartość statystyki Morana oraz istotność testu wskazują jednoznacznie na silnie dodatnią przestrzenną autokorelację wzrostu PKB – kraje o podobnych wynikach wzrostu gospodarczego były skupione geograficznie.
+
+Taki wynik potwierdza, że przestrzenne rozmieszczenie danych ma znaczenie analityczne i należy je uwzględniać w dalszych modelach statystycznych.
+
+## Model linowy
+
+``` {r statistically_important_model }
+model_reduced <- lm(
+  gdp_growth_1960_1980 ~
+    Life_Exp + 
+    GDPsh560 + 
+    NEquip_Inv +
+    Rule_of_Law +
+    SubSahara,
+  data = dane
+)
+```
+W celu zbadania czynników wpływających na wzrost PKB per capita w latach 1960–1980 skonstruowano model regresji liniowej. Zmienną objaśnianą jest gdp_growth_1960_1980, natomiast zmiennymi objaśniającymi są:
+Model tłumaczy około 70% zmienności wzrostu PKB per capita (R² = 0.7005), co wskazuje na dobr3 dopasowanie. Wszystkie zmienne są statystycznie istotne na poziomie istotności większym niż 0.01.
+
+Dłuższe życie w populacji jest pozytywnie skorelowane ze wzrostem gospodarczym — każdy dodatkowy rok życia zwiększa wzrost PKB per capita o ok. 0.106 punktu procentowego.
+Wyższy poziom PKB per capita w 1960 roku wiąże się z niższym tempem wzrostu w kolejnych dekadach, co sugeruje efekt doganiania (catch-up effect).
+Większy udział wydatków inwestycyjnych przeznaczonych na elementy inne niż środki trwałe (np. zasoby ludzkie, badania i rozwój) wiąże się z większym wzrostem gospodarczym. Wzrost tego udziału o 1 punkt procentowy przekłada się na wzrost PKB per capita o ok. 0.075 punktu.
+Silniejsze rządy prawa mają pozytywny wpływ na wzrost gospodarczy.
+Kraje Afryki Subsaharyjskiej odnotowały istotnie niższy wzrost gospodarczy w badanym okresie, co może odzwierciedlać zarówno czynniki historyczne, jak i strukturalne.
+
+Model wskazuje na istotną rolę kapitału ludzkiego, rządów prawa oraz poziomu wyjściowego rozwoju w kształtowaniu wzrostu gospodarczego w krajach świata w latach 1960–1980.
+
+## Test Moran I dla reszt modelu liniowego
+``` {r Moran_I_Test_of_residuals}
+model_reduced_residuals <- residuals(model_reduced)
+
+moran_residualds <- moran.test(model_reduced_residuals, weights)
+```
+
+W celu sprawdzenia, czy reszty modelu regresji liniowej wykazują przestrzenną autokorelację, przeprowadzono test Morana I dla reszt modelu.
+Wynik testu: Moran I = 0.336, p-value = 9.34e-07, wariancja: 0.00546.
+
+Wysoka dodatnia wartość statystyki Morana i bardzo niska p-wartość pozwalają odrzucić hipotezę zerową o braku autokorelacji przestrzennej. Oznacza to, że reszty modelu nie są niezależne przestrzennie — kraje geograficznie bliskie sobie mają podobne wartości reszt. Taki wynik sugeruje, że model może nie w pełni uwzględniać efektów przestrzennych i warto rozważyć zastosowanie modelu regresji przestrzennej (np. SAR lub SEM).
+
+## Test Lagrange Multiplayer
+``` {r lagrange_multiplier_test}
+lm_test <- lm.LMtests(model_reduced, listw = weights, test = c("LMerr", "LMlag", "RLMerr", "RLMlag"))
+```
+
+W celu zidentyfikowania obecności zależności przestrzennej w danych, zastosowano cztery testy Lagrange Multiplayer (LM), znane również jako testy Rao's score:
+
+1. LM-error (RSerr): wykazał istotność statystyczną (p < 0.00001), co sugeruje obecność przestrzennej autokorelacji w składniku losowym.
+2. LM-lag (RSlag): również istotny (p < 0.00001), co wskazuje na możliwą zależność przestrzenną w zmiennej objaśnianej.
+3. Skorygowany LM-error (adjRSerr): istotny (p = 0.0114), co potwierdza, że po uwzględnieniu wpływu efektu lag nadal występuje przestrzenna autokorelacja w resztach.
+4. Skorygowany LM-lag (adjRSlag): istotny (p = 0.0158), co również wskazuje na istotną przestrzenną zależność typu lag.
+
+Ponieważ obie skorygowane wersje testów (adjRSerr i adjRSlag) są istotne, można wnioskować, że zarówno model SAR (z efektem lag), jak i SEM (z efektem błędu) są potencjalnie adekwatne. W takiej sytuacji zaleca się porównać dopasowanie obu modeli przestrzennych i ocenić, który lepiej opisuje dane.
+
+## Wskaźniki LISA i ich wizualizacja
+
+Wskaźniki lokalne autokorelacji przestrzennej (LISA — Local Indicators of Spatial Association) służą do wykrywania przestrzennych wzorców korelacji lokalnych, czyli np. skupisk wartości wysokich lub niskich w danych geograficznych.
+
+``` {r local_moran}
+library(sf)
+library(spdep)
+library(tmap)
+
+coords_m <- st_coordinates(coords_sf)
+
+neighbors <- dnearneigh(coords, 0, 20000)
+
+weights <- nb2listw(neighbors, style = "W", zero.policy = TRUE)
+
+local_moran <- localmoran(dane$gdp_growth_1960_1980, weights, zero.policy = TRUE)
+
+coords_sf$Ii <- local_moran[, "Ii"]
+coords_sf$Z <- local_moran[, "Z.Ii"]
+coords_sf$pvalue <- local_moran[, "Pr(z != E(Ii))"]
+
+mean_value <- mean(dane$gdp_growth_1960_1980, na.rm = TRUE)
+mean_Ii <- mean(coords_sf$Ii, na.rm = TRUE)
+
+coords_sf$kwadranty <- with(coords_sf, 
+  ifelse(gdp_growth_1960_1980 > mean_value & Ii > mean_Ii, "High-High",
+  ifelse(gdp_growth_1960_1980 < mean_value & Ii < mean_Ii, "Low-Low",
+  ifelse(gdp_growth_1960_1980 > mean_value & Ii < mean_Ii, "High-Low",
+  ifelse(gdp_growth_1960_1980 < mean_value & Ii > mean_Ii, "Low-High", NA)))))
+
+tmap_mode("view")  # interaktywna mapa
+
+tm_shape(coords_sf) +
+  tm_dots(col = "kwadranty", palette = c("red", "pink", "lightblue", "blue")) +
+  tm_layout(legend.outside = TRUE)
+```
+
+W celu identyfikacji przestrzennych wzorców zmiennej badanej zastosowano lokalny wskaźnik Morana. Metoda ta pozwala wykryć obszary o statystycznie istotnym skupieniu podobnych wartości, co wskazuje na występowanie przestrzennych klastrów.
+Na mapie przedstawiono podział obszarów na cztery typy przestrzennych zależności:
+
+1. Klastry wysokich wartości (High-High): Regiony o wysokich wartościach zmiennej, otoczone przez inne obszary charakteryzujące się wysokimi wartościami. Są to tzw. „gorące punkty”, które wskazują na silne zjawiska koncentracji.
+2. Klastry niskich wartości (Low-Low): Obszary o niskich wartościach zmiennej, które sąsiadują z regionami o niskich wartościach. Takie skupiska wskazują na regiony o niskim poziomie średniego wzrostu PKB.
+3. Obszary o wysokich wartościach otoczone niskimi (High-Low): Lokalizacje, gdzie obserwuje się anomalie — wysoka wartość w otoczeniu niskich. Mogą to być potencjalne punkty zainteresowania do dalszej analizy, wskazujące np. na niejednorodność zjawiska.
+4. Obszary o niskich wartościach otoczone wysokimi (Low-High): Przeciwny przypadek do poprzedniego, gdzie niska wartość występuje w regionie o wysokich wartościach.
+
+Wyniki lokalnego wskaźnika Morana zostały poddane testowi istotności statystycznej (p < 0,05), co pozwoliło wyróżnić tylko te klastry, które charakteryzują się istotną przestrzenną autokorelacją. Wizualizacja na mapie umożliwia szybkie zlokalizowanie i interpretację obszarów o różnym charakterze przestrzennym, wspierając podejmowanie decyzji i dalsze analizy przestrzenne.
+
+Na wykresie wyraźnie widać gorące skupisko w rejonie europy oraz zimne w Afryce. W rejonie azji wschodniej widoczna jest dominuja państwa o charakterze High-Low, wynika to z fakty bardzo słabego średniego wzrostu gospodarczego na Filipinach. W Ameryce południowej przeplatają się wszystkie typy obszarów.   
