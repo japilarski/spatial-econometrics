@@ -438,3 +438,240 @@ Na mapie przedstawiono podział obszarów na cztery typy przestrzennych zależno
 Wyniki lokalnego wskaźnika Morana zostały poddane testowi istotności statystycznej (p < 0,05), co pozwoliło wyróżnić tylko te klastry, które charakteryzują się istotną przestrzenną autokorelacją. Wizualizacja na mapie umożliwia szybkie zlokalizowanie i interpretację obszarów o różnym charakterze przestrzennym, wspierając podejmowanie decyzji i dalsze analizy przestrzenne.
 
 Na wykresie wyraźnie widać gorące skupisko w rejonie europy oraz zimne w Afryce. W rejonie azji wschodniej widoczna jest dominuja państwa o charakterze High-Low, wynika to z fakty bardzo słabego średniego wzrostu gospodarczego na Filipinach. W Ameryce południowej przeplatają się wszystkie typy obszarów.   
+
+## Klasyczny model OLS
+
+Klasyczny model OLS pełni w analizie przestrzennej rolę punktu odniesienia. Pozwala określić, czy istnieje zależność między badanymi zmiennymi bez uwzględnienia wpływu przestrzennego. Służy on do ocenienia podstawowej struktury zależności, sprawdzenia, które zmienne sa istotne w modelu nieprzestrzennym oraz do porówanania dopasowaina i istotności wyników z modelami przestrzennymi (SAM i SEM), które zostaną przedstawione w późniejszym punkcie. 
+Porównanie  modelu OLS z modelami przestrzennymi pozwoli ustalić, czy uwzględnienie efektów przestrzennych poprawi jakość modelu.
+
+``` {r klasyczny model OLS}
+
+ols_model <- lm(gdp_growth_1960_1980 ~ Life_Exp + NEquip_Inv + Rule_of_Law + GDPsh560
+                + SubSahara,
+                data = world_merged)
+
+summary(ols_model)
+```
+Model OLS został oszacowany w celu zbadania czynników wpływających na średni wzrost PKB w latach 1960–1980. Wyniki wskazują, że wszystkie uwzględnione zmienne są statystycznie istotne (p < 0.05), a dopasowanie modelu jest wysokie (R² = 0.724).
+
+Life_Exp (średnia długość życia): ma istotny dodatni wpływ na wzrost gospodarczy. Sugeruje to, że wyższy poziom zdrowia i warunków życia sprzyja rozwojowi gospodarczemu.
+
+NEquip_Inv (wydatki inne niż w środki trwałe): również wpływa pozytywnie – inwestycje w kapitał ludzki i infrastrukturę społeczną mogą stymulować wzrost.
+
+Rule_of_Law (praworządność): istotny pozytywny wpływ sugeruje, że lepsze instytucje i stabilność prawna wspierają rozwój gospodarczy.
+
+GDPsh560 (PKB per capita w 1960): wykazuje istotny negatywny wpływ, co można interpretować jako efekt doganiania – kraje biedniejsze w 1960 rozwijały się szybciej.
+
+## Model przestrzenny SAR
+
+Model przestrzenny SAR (Spatial Autoregressive Model) służy do uwzględniania przestrzennej zależności między jednostkami obserwacyjnymi (np. krajami, regionami, województwami) w modelowaniu ekonometrycznym.
+Używamy modelu kiedy chcemy złapać efekt "wpływu sąsiadów". Przez co pozwala na bardziej trafne wnioskowanie oraz unikanie błędów wynikających z pominięcia zależności przestrzennych.
+
+``` {r model przestrzeny SAR}
+library(sf)
+library(spdep)
+library(spatialreg)
+library(dplyr)
+
+data_sar <- world_merged %>%
+  dplyr::select(gdp_growth_1960_1980, Life_Exp, NEquip_Inv, Rule_of_Law, GDPsh560, SubSahara, geometry) %>%
+  na.omit()
+
+nb <- poly2nb(data_sar) #lista sąsiadów
+lw <- nb2listw(nb, style = "W", zero.policy = TRUE) # macierz wag przestrzennych
+
+sar_model <- lagsarlm(
+  formula = gdp_growth_1960_1980 ~ Life_Exp + NEquip_Inv + Rule_of_Law + GDPsh560 + SubSahara,
+  data = data_sar,
+  listw = lw,
+  zero.policy = TRUE
+)
+
+summary(sar_model)
+```
+
+Istotność parametrów oceniono na podstawie wartości p (pochodzących z oszacowanego modelu) w porównaniu z poziomem istotności 0,05. Spośród zmiennych uwzględnionych w modelu istotne statystycznie okazały się
+
+Life_Exp (średnia długość życia) – wzrost średniej długości życia o jedną jednostkę powoduje wzrost średniego wzrostu PKB w latach 1960-1980 o około 0,109, przy założeniu stałości pozostałych zmiennych; wyższy poziom zdrowia i warunków życia sprzyja rozwojowi gospodarczemu.
+
+NEquip_Inv (wydatki inne niż na środki trwałe) – wzrost wydatków o jedną jednostkę zwiększa wzrost PKB o około 0,064, przy pozostałych czynnikach niezmienionych; inwestycje w kapitał ludzki i infrastrukturę społeczną pozytywnie wpływają na rozwój gospodarczy.
+
+Rule_of_Law (praworządność) – wzrost wskaźnika praworządności o jedną jednostkę wiąże się ze wzrostem średniego wzrostu PKB o około 2,75, co wskazuje na silny pozytywny wpływ jakości instytucji i stabilności prawnej na rozwój gospodarczy.
+
+GDPsh560 (logarytm PKB per capita w 1960) – wykazuje istotny ujemny wpływ, gdzie wzrost tej zmiennej o jedną jednostkę powoduje spadek wzrostu PKB o około 2,36, co można interpretować jako efekt doganiania – kraje biedniejsze w 1960 rozwijały się szybciej.
+
+SubSahara (lokalizacja w Afryce Subsaharyjskiej) – kraje tego regionu charakteryzują się średnio niższym wzrostem PKB o około 2,45 jednostki w analizowanym okresie, co może wynikać ze specyficznych uwarunkowań historycznych i strukturalnych.
+
+``` {r model przestrzeny SAR obliczenie R}
+
+N <- length(sar_model$fitted.values) # Liczba obserwacji w modelu SAR
+
+SSR_sar <- sar_model$s2 * N # Resztowa suma kwadratów (SSR) — s2 to wariancja reszt z modelu SAR
+
+SST <- var(data_sar$gdp_growth_1960_1980, na.rm = TRUE) * (nrow(data_sar) - 1) # Całkowita suma kwadratów (SST) — dla zmiennej zależnej (gdp_growth_1960_1980)
+
+# Obliczenie pseudo R^2
+pseudo_R2 <- 1 - (SSR_sar / SST)
+pseudo_R2
+```
+Otrzymana wartość pseudo-R² (0,726) wskazuje, że model SAR dobrze odwzorowuje rzeczywistą zmienność tempa wzrostu PKB w badanym okresie. Oznacza to, że większość obserwowanych różnic w dynamice wzrostu gospodarczego między państwami można wyjaśnić poprzez uwzględnione czynniki, takie jak długość życia, inwestycje, praworządność, poziom PKB początkowego oraz przynależność do regionu Afryki Subsaharyjskiej.
+
+Dopasowanie modelu SAR do danych empirycznych:
+
+AIC (model SAR): 191,33
+AIC (klasyczny model OLS): 189,69
+Pseudo-R²: 0,726 (obliczone)
+Log-likelihood: –87,66
+
+Model przestrzenny z opóźnieniem (SAR) nieco gorzej wypada niż klasyczny model OLS pod względem AIC (niższe AIC jest lepsze), jednak różnica jest niewielka (ok. 1,6 punktu), co sugeruje, że uwzględnienie zależności przestrzennych nie poprawia istotnie dopasowania modelu.
+Wartość pseudo R² = 0,726 wskazuje, że około 72,6% całkowitej zmienności wzrostu PKB w latach 1960–1980 jest wyjaśniana przez zmienne objaśniające oraz strukturę przestrzenną modelu.
+Logarytm wiarygodności (log-likelihood) może być używany jako miara porównawcza pomiędzy modelami – im wyższy (mniej ujemny), tym lepsze dopasowanie. Wartość -87,66 dla modelu SAR nie wskazuje na istotne polepszenie względem modelu OLS.
+
+Testowanie istotności interakcji przestrzennych (autoregresja i autokorelacja):
+
+Autoregresja:
+Rho (ρ) = 0,052 – dodatni współczynnik opóźnienia przestrzennego sugeruje, że wzrost PKB w danym kraju może być nieznacznie powiązany z sytuacją gospodarczą w krajach sąsiednich.
+
+Test LR (test ilorazu wiarygodności): wartość testu = 0,365; p-value = 0,546
+Test Walda (z-test dla ρ): z = 0,627; p-value = 0,531
+
+W obu przypadkach brak podstaw do odrzucenia hipotezy zerowej (H₀: ρ = 0), co oznacza, że efekt przestrzennego opóźnienia nie jest statystycznie istotny. Innymi słowy, nie ma silnych dowodów na przestrzenną zależność pomiędzy wzrostem PKB w krajach sąsiadujących.
+
+Autokorelacja:
+Test LM (autokorelacja przestrzenna reszt): wartość testu = 0,660; p-valeu = 0,417
+
+Wynik jest nieistotny statystycznie, co sugeruje, że model SAR jest dobrze wyspecyfikowany pod względem przestrzennym. Nie ma potrzeby stosowania modelu błędu przestrzennego (SEM).
+
+Model SAR uwzględnia strukturę przestrzenną, ale brakuje istotnych statystycznie dowodów na występowanie efektów przestrzennych (ani autoregresji, ani autokorelacji).
+
+Dopasowanie modelu SAR nie jest znacząco lepsze niż modelu OLS, a klasyczny model regresji liniowej wypada nieco korzystniej pod względem AIC.
+
+Zmienność wzrostu gospodarczego jest w dużym stopniu wyjaśniana przez zmienne społeczno-ekonomiczne zawarte w modelu (np. długość życia, inwestycje, praworządność, poziom PKB początkowego, przynależność do Afryki Subsaharyjskiej), a nie przez powiązania przestrzenne.
+
+``` {r Moran dla reszt SAR}
+
+residuals_sar <- residuals(sar_model)
+
+moran_sar <- moran.test(residuals_sar, lw, zero.policy = TRUE)
+print(moran_sar)
+
+```
+Wartość p jest wyższa niż standardowy poziom istotności (0.05), co oznacza, że brak podstaw do odrzucenia hipotezy zerowej o braku przestrzennej autokorelacji. W związku z tym reszty modelu SAR nie są przestrzennie skorelowane, co sugeruje, że model dobrze uwzględnił przestrzenną strukturę zależności w danych.
+
+``` {r Moran dla reszt SAR WYKRES}
+
+library(spdep)
+
+moran.plot(residuals_sar, lw, labels = world_merged$admin,
+           xlab = "Reszty", ylab = "Przestrzennie ważone reszty",
+           main = "Moran 1 Plot dla reszt modelu SAR")
+
+```
+
+``` {r Moran dla reszt SAR MAPA}
+
+data_sar$residuals_sar <- residuals(sar_model)
+
+library(dplyr)
+library(sf)
+library(tmap)
+
+names(world_merged)
+tmap_mode("plot")
+
+tm_shape(world_merged) +
+  tm_polygons("residuals_sar",
+              palette = "-RdBu",
+              style = "quantile",
+              title = "Reszty SAR") +
+  tm_layout(main.title = "Przestrzenny rozkład reszt modelu SAR",
+            legend.outside = TRUE)
+
+```
+
+## Model Durbin
+
+Model Durbin (Spatial Durbin Model, SDM) rozszerza klasyczny model SAR o efekt przestrzenny zmiennych objaśniających.
+
+
+``` {r model Durbin}
+library(spdep)
+
+sdm_model <- lagsarlm(
+  formula = gdp_growth_1960_1980 ~ Life_Exp + NEquip_Inv + Rule_of_Law + GDPsh560 + SubSahara,
+  data = data_sar,
+  listw = lw,
+  type = "Durbin",
+  zero.policy = TRUE
+)
+
+summary(sdm_model)
+
+```
+Model Durbin uwzględniający zarówno efekt przestrzennej zależności zmiennej zależnej, jak i przestrzenne opóźnienia zmiennych objaśniających, wykazał umiarkowaną poprawę dopasowania względem modeli OLS i SAR. Wartość AIC wyniosła 192,99 (wobec 194,66 w OLS), a logarytm wiarygodności -83,49.
+
+Parametr przestrzennej autoregresji (rho = 0,221) okazał się istotny statystycznie (test Wald: p = 0,034), co wskazuje na istnienie dodatniego wpływu wzrostu PKB w sąsiednich regionach na wzrost w danym regionie. Test LM wykazał brak przestrzennej autokorelacji reszt (p = 0,926), co potwierdza poprawną specyfikację modelu.
+
+Wyniki wskazują, że wzrost gospodarczy w latach 1960–1980 był istotnie pozytywnie związany z oczekiwaną długością życia, inwestycjami w sprzęt oraz praworządnością, a negatywnie z poziomem PKB z 1960 roku i przynależnością do regionu subsaharyjskiego. Efekty przestrzenne zmiennych objaśniających (tzn. wartości tych zmiennych w regionach sąsiednich) okazały się nieistotne statystycznie.
+
+Model Durbin pozwolił na bardziej szczegółowe uchwycenie zależności przestrzennych, jednak głównym czynnikiem różnicującym wzrost gospodarczy pozostają lokalne cechy regionów, a nie ich przestrzenne otoczenie.
+
+
+``` {r Moran dla reszt SDM}
+
+residuals_durbin <- residuals(sdm_model)
+moran_test <- moran.test(residuals_durbin, lw, zero.policy = TRUE)
+print(moran_test)
+
+```
+Test Morana I dla reszt modelu Durbin (SDM) wykazał brak istotnej przestrzennej autokorelacji (I = 0.0057, p = 0.4312). Oznacza to, że model skutecznie uwzględnił zależności przestrzenne i nie ma przesłanek do stosowania innego modelu przestrzennego (np. błędu przestrzennego). Reszty są losowo rozmieszczone w przestrzeni, co świadczy o poprawnej specyfikacji modelu.
+
+``` {r Moran dla reszt SDM WYKRES}
+
+library(spdep)
+
+moran.plot(residuals_durbin, lw, labels = world_merged$admin,
+           xlab = "Reszty", ylab = "Przestrzennie ważone reszty",
+           main = "Moran 1 Plot dla reszt modelu SDM")
+
+```
+## Wnioksi i rekonedacje
+
+Kluczowe czynniki wpływające na wzrost gospodarczy
+
+W projekcie zidentyfikowano istotne czynniki statystyczne determinujące wzrost PKB w latach 1960–1980:
+
+- Długość życia (Life_Exp): dodatni, silnie istotny wpływ – lepsze zdrowie i warunki życia sprzyjają rozwojowi gospodarczemu.
+- Inwestycje w nowe wyposażenie (NEquip_Inv): pozytywny wpływ, wskazujący na znaczenie modernizacji infrastruktury.
+- Praworządność (Rule_of_Law): bardzo silnie dodatni efekt – państwa z wyższą jakością instytucji osiągają wyższy wzrost gospodarczy.
+- Poziom PKB początkowego (GDPsh560): ujemny i istotny wpływ – efekt konwergencji: kraje biedniejsze rozwijają się szybciej.
+- Położenie w Afryce Subsaharyjskiej (SubSahara): negatywny wpływ, co może odzwierciedlać strukturalne problemy rozwojowe.
+
+Znaczenie efektów przestrzennych
+
+Model SAR:
+
+Pseudo R² ≈ 0.73 – wysoka zgodność z danymi.
+Rho (ρ) ≈ 0.22 – wskazuje na umiarkowaną pozytywną zależność między sąsiadującymi krajami.
+Testy LR i Wald wykazały graniczną istotność efektu przestrzennego (p ≈ 0.05).
+
+Efekt przestrzenny istnieje, ale nie jest dominujący.
+
+Model SDM (Durbin):
+
+Uwzględnia zarówno wpływ sąsiadów (rho), jak i zmiennych objaśniających w sąsiedztwie. Zmienne przestrzenne nie były istotne → zjawisko głównie zależne od lokalnych cech, nie efektu sąsiedztwa. Reszty pozbawione autokorelacji przestrzennej (Moran I ≈ 0.006; p = 0.43) co świadczy o dobrze dopasowanym modelem.
+
+Wnioski dla polityki publicznej / decyzji lokalnych:
+
+Skupienie się na jakości instytucji (praworządność) oraz inwestycjach w zdrowie i kapitał fizyczny powinno być priorytetem polityki rozwoju, choć efekt przestrzenny występuje, polityki narodowe są kluczowe – efekt otoczenia regionalnego jest ograniczony. Dla państw biedniejszych priorytetem powinna być polityka sprzyjająca konwergencji np. inwestycje w edukację, zdrowie, instytucje, a w regionach o słabszym rozwoju (np. Afryka Subsaharyjska) jest potrzeba polityk długofalowych, dostosowanych do barier strukturalnych.
+
+Krytyczna ocena ograniczeń danych i metod:
+
+- Dane dotyczą okresu historycznego (1960–1980) – wyniki mogą nie być aktualne w kontekście obecnych wyzwań (np. transformacja cyfrowa, zmiany klimatu).
+
+- Agregacja przestrzenna do poziomu państw upraszcza lokalne zróżnicowanie (np. wewnętrzne nierówności).
+
+- Efekty przestrzenne umiarkowane – możliwe, że zastosowana macierz wag nie oddaje najlepiej rzeczywistej intensywności powiązań (np. gospodarczych).
+
+- Brak niektórych zmiennych (np. edukacja, polityka monetarna, globalizacja) może ograniczać pełnię wyjaśnienia modelu.
+
