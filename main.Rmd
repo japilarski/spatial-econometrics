@@ -568,10 +568,10 @@ moran.plot(residuals_sar, lw, labels = world_merged$admin,
 
 ```
 
-``` {r Moran dla reszt SAR MAPA}
+<!-- ``` {r Moran dla reszt SAR MAPA}
 
 data_sar$residuals_sar <- residuals(sar_model)
-
+print(data_sar$residuals_sar)
 library(dplyr)
 library(sf)
 library(tmap)
@@ -581,13 +581,12 @@ tmap_mode("plot")
 
 tm_shape(world_merged) +
   tm_polygons("residuals_sar",
-              palette = "-RdBu",
-              style = "quantile",
+              palette = "RdBu",
               title = "Reszty SAR") +
   tm_layout(main.title = "Przestrzenny rozkład reszt modelu SAR",
             legend.outside = TRUE)
 
-```
+``` -->
 
 ## Model Durbin
 
