@@ -567,27 +567,132 @@ moran.plot(residuals_sar, lw, labels = world_merged$admin,
            main = "Moran 1 Plot dla reszt modelu SAR")
 
 ```
+# Test Breush-Pagan
 
-``` {r Moran dla reszt SAR MAPA}
+Breusch-Pagan Test (BP Test) – bada liniową formę heteroskedastyczności na resztach z modelu.
+H0: Homoskedastyczność (stała wariancja błędu)
+H1: Heteroskedastyczność (wariancja zależna od regresorów)
 
-data_sar$residuals_sar <- residuals(sar_model)
+``` {r Breush-Pagan Test dla OLS}
 
-library(dplyr)
-library(sf)
-library(tmap)
+library(lmtest)
+bptest(ols_model)
 
-names(world_merged)
-tmap_mode("plot")
-
-tm_shape(world_merged) +
-  tm_polygons("residuals_sar",
-              palette = "-RdBu",
-              style = "quantile",
-              title = "Reszty SAR") +
-  tm_layout(main.title = "Przestrzenny rozkład reszt modelu SAR",
-            legend.outside = TRUE)
 
 ```
+
+Statystyka testowa (BP) = 11,252
+Liczba stopni swobody (df) = 5
+Wartość p = 0,04661
+
+Ponieważ wartość p = 0,0466 jest mniejsza niż 0,05, odrzucamy hipotezę zerową o homoskedastyczności. Oznacza to, że istnieją statystycznie istotne dowody na występowanie heteroskedastyczności w naszym modelu. Innymi słowy, wariancja reszt nie jest stała — zmienia się w zależności od wartości zmiennych objaśniających.
+
+Test Breuscha–Pagana wskazuje na obecność ogólnej heteroskedastyczności w modelu — oznacza to, że wariancja reszt nie jest stała i zmienia się w zależności od wartości zmiennych objaśniających. Z kolei test Morana I nie wykazuje przestrzennej autokorelacji reszt, co oznacza brak przestrzennego skupiania się dużych lub małych wartości reszt, czyli brak przestrzennej heteroskedastyczności. Wyniki obu testów się nie wykluczają — przeciwnie, są komplementarne: model cierpi na ogólną heteroskedastyczność, ale dobrze uwzględnia przestrzenną strukturę danych.
+
+# Model SEM
+
+Model to błędny model autoregresji przestrzennej (SEM) — czyli zakładamy, że zależności przestrzenne są zawarte w składniku losowym (błędzie modelu), a nie bezpośrednio w zmiennej zależnej.
+
+``` {r model SEM}
+
+library(spdep)
+
+sem_model <- errorsarlm(
+  formula = gdp_growth_1960_1980 ~ Life_Exp + NEquip_Inv + Rule_of_Law + GDPsh560 + SubSahara,
+  data = data_sar,
+  listw = lw,
+  zero.policy = TRUE
+)
+
+summary(sem_model)
+
+```
+Współczynniki regresji wskazują, że wszystkie zmienne uwzględnione w modelu mają istotny wpływ na wzrost PKB w latach 1960–1980. Oczekiwana długość życia (Life_Exp) ma dodatni współczynnik 0,1122, co oznacza, że wzrost tej zmiennej o jednostkę wiąże się ze wzrostem tempa wzrostu PKB o około 0,11 jednostki. Inwestycje w sprzęt (NEquip_Inv) również mają pozytywny wpływ z wartością 0,0600, natomiast poziom rządów prawa (Rule_of_Law) wykazuje jeszcze silniejszy efekt dodatni – współczynnik wynosi 2,6877, co podkreśla ważność stabilności instytucjonalnej dla rozwoju gospodarczego.
+
+Z kolei udział PKB z 1960 roku (GDPsh560) ma współczynnik ujemny -2,2981, co wskazuje, że wyższy początkowy poziom PKB wiąże się z niższym tempem wzrostu, co może świadczyć o efekcie konwergencji. Podobnie region Subsaharyjski (SubSahara) charakteryzuje się ujemnym współczynnikiem -2,3656, co oznacza, że kraje z tego obszaru notowały istotnie niższe tempo wzrostu w analizowanym okresie. Wszystkie te wyniki są statystycznie istotne przy bardzo niskich wartościach p (p < 0,05), co potwierdza znaczącą rolę tych czynników w wyjaśnianiu dynamiki wzrostu gospodarczego.
+
+Lambda = 0.1613 ze statystyką LR = 1.1685 i p-wartością 0.2797
+Odrzucamy hipotezę o obecności istotnej autokorelacji przestrzennej w składniku błędu, ponieważ p > 0,05. Wskazuje to, że przestrzenna korelacja reszt nie jest statystycznie istotna — czyli model SEM nie wykazuje silnej autokorelacji przestrzennej w błędzie.
+
+``` {r model przestrzeny SEM obliczenie R}
+
+N <- length(sem_model$fitted.values) # Liczba obserwacji w modelu SEM
+
+SSR_sem <- sem_model$s2 * N # Resztowa suma kwadratów (SSR) — s2 to wariancja reszt z modelu SEM
+
+SST <- var(data_sar$gdp_growth_1960_1980, na.rm = TRUE) * (nrow(data_sar) - 1) # Całkowita suma kwadratów (SST) — dla zmiennej zależnej (gdp_growth_1960_1980)
+
+# Obliczenie pseudo R^2
+pseudo_R2 <- 1 - (SSR_sem / SST)
+pseudo_R2
+```
+
+Pseudo R² = 0.7319
+
+Oznacza to, że model SEM wyjaśnia około 73,2% zmienności zmiennej zależnej (wzrostu PKB) w badanych jednostkach przestrzennych. Chociaż pseudo R2 nie jest bezpośrednio porównywalne z klasycznym R2 z modelu OLS (które wynosi 0.724), to nadal daje ogólny obraz dopasowania modelu.
+
+W ekonomii przestrzennej wartości pseudo R2 powyżej 0,3–0,4 często są uznawane za dobre, więc wynik powyżej 0,7 wskazuje na bardzo dobrą jakość dopasowania modelu.
+
+Log-likelihood = -87.2624, AIC = 190.52
+
+Niższa wartość AIC świadczy o lepszym dopasowaniu modelu przy uwzględnieniu liczby parametrów.
+
+Dla porównania:
+
+Model OLS ma AIC = 189.69
+Model SAR ma AIC = 191.33, log-likelihood = -87.66412.
+
+Porównując te wartości, model SEM ma AIC zbliżone do modelu OLS i nieco niższe niż SAR, co sugeruje, że model przestrzenny dobrze uchwycił strukturę danych.
+
+Jeśli różnica jest niewielka lub model przestrzenny ma wyższe AIC, może to oznaczać, że efekty przestrzenne nie mają dużego znaczenia lub zostały już ujęte przez zmienne objaśniające.
+
+Parametr przestrzenny lambda w modelu SEM jest nieistotny (p = 0.28), parametr rho w modelu SAR także jest nieistotny (p = 0.54), co potwierdza, że efekty przestrzenne są słabe lub niewielkie.
+
+# Model SLX
+
+Model SLX (Spatial Lag of X) służy do badania, czy zmienne objaśniające w sąsiednich jednostkach przestrzennych (np. powiatach, krajach) mają wpływ na wartość zmiennej zależnej w danej jednostce. Pozwala więc uwzględnić tzw. przestrzenny rozlew efektów – np. czy inwestycje w regionach sąsiednich wpływają na lokalny wzrost gospodarczy. W przeciwieństwie do modeli SAR i SEM, SLX nie zakłada zależności przestrzennych w samej zmiennej zależnej ani w resztach, lecz tylko w zmiennych objaśniających. Jest to model przydatny przy ocenie polityk publicznych i lokalnych efektów sąsiedztwa.
+
+``` {r Model SLX}
+
+Life_Exp_lag <- lag.listw(lw, data_sar$Life_Exp)
+NEquip_Inv_lag <- lag.listw(lw, data_sar$NEquip_Inv)
+Rule_of_Law_lag <- lag.listw(lw, data_sar$Rule_of_Law)
+GDPsh560_lag <- lag.listw(lw, data_sar$GDPsh560)
+SubSahara_lag <- lag.listw(lw, data_sar$SubSahara)
+
+model_slx <- lm(gdp_growth_1960_1980 ~ 
+                  Life_Exp + NEquip_Inv + Rule_of_Law + GDPsh560 + SubSahara + 
+                  Life_Exp_lag + NEquip_Inv_lag + Rule_of_Law_lag + GDPsh560_lag + SubSahara_lag,
+                data = data_sar)
+
+summary(model_slx)
+
+```
+
+Wyniki modelu regresji przestrzennej SLX pokazują, że zmienne niezależne bezpośrednio wpływają na tempo wzrostu PKB w latach 1960–1980, natomiast efekty opóźnionych przestrzennie zmiennych objaśniających są statystycznie nieistotne.
+
+Model ma wysoką wartość dopasowania:
+
+R² = 0.7447
+
+Skorygowany R² = 0.6965
+Oznacza to, że model wyjaśnia około 69,7% zmienności tempa wzrostu PKB.
+
+Spośród zmiennych bezpośrednich, istotne statystycznie (p < 0,05) są:
+
+- Life_Exp (długość życia) – dodatni wpływ (β = 0.1059),
+- NEquip_Inv (inwestycje w wyposażenie) – dodatni wpływ (β = 0.0660),
+- Rule_of_Law (stan praworządności) – silny dodatni wpływ (β = 2.8850),
+- GDPsh560 (logarytm PKB na mieszkańca w 1960 r.) – ujemny wpływ (β = -2.3712),
+- SubSahara (region subsaharyjski) – ujemny wpływ (β = -2.2236).
+
+Z kolei współczynniki przy lagowanych zmiennych przestrzennych (czyli wartości tych zmiennych u sąsiadów) nie są statystycznie istotne (wszystkie p > 0.2), co oznacza, że efekty przestrzenne zmiennych objaśniających w tym modelu nie wpływają znacząco na wzrost PKB w badanych jednostkach. 
+
+Intercept jest istotny i wynosi 12.0143, co odzwierciedla wartość oczekiwaną tempa wzrostu PKB przy średnich wartościach zmiennych objaśniających.
+
+Reszty modelu charakteryzują się standardowym błędem 1.009, co wskazuje na umiarkowany rozrzut obserwowanych wartości względem wartości prognozowanych.
+
+Test F dla całego modelu jest istotny (F = 15.46, p < 0.001), co świadczy o tym, że model jest statystycznie istotny i zmienne objaśniające razem dobrze tłumaczą zmienność wzrostu PKB.
 
 ## Model Durbin
 
@@ -637,25 +742,50 @@ moran.plot(residuals_durbin, lw, labels = world_merged$admin,
 ```
 ## Wnioksi i rekonedacje
 
+
 Kluczowe czynniki wpływające na wzrost gospodarczy
 
-W projekcie zidentyfikowano istotne czynniki statystyczne determinujące wzrost PKB w latach 1960–1980:
+W projekcie zidentyfikowano istotne statystycznie czynniki determinujące wzrost PKB w latach 1960–1980:
 
 - Długość życia (Life_Exp): dodatni, silnie istotny wpływ – lepsze zdrowie i warunki życia sprzyjają rozwojowi gospodarczemu.
+
 - Inwestycje w nowe wyposażenie (NEquip_Inv): pozytywny wpływ, wskazujący na znaczenie modernizacji infrastruktury.
+
 - Praworządność (Rule_of_Law): bardzo silnie dodatni efekt – państwa z wyższą jakością instytucji osiągają wyższy wzrost gospodarczy.
+
 - Poziom PKB początkowego (GDPsh560): ujemny i istotny wpływ – efekt konwergencji: kraje biedniejsze rozwijają się szybciej.
+
 - Położenie w Afryce Subsaharyjskiej (SubSahara): negatywny wpływ, co może odzwierciedlać strukturalne problemy rozwojowe.
 
 Znaczenie efektów przestrzennych
 
-Model SAR:
+Model SAR (Spatial Autoregressive):
 
-Pseudo R² ≈ 0.73 – wysoka zgodność z danymi.
-Rho (ρ) ≈ 0.22 – wskazuje na umiarkowaną pozytywną zależność między sąsiadującymi krajami.
-Testy LR i Wald wykazały graniczną istotność efektu przestrzennego (p ≈ 0.05).
+Pseudo R² ≈ 0.73 – bardzo dobra zgodność modelu z danymi.
+Rho (ρ) ≈ 0.22 – wskazuje na umiarkowaną dodatnią zależność między sąsiadującymi krajami.
+Testy LR i Wald wykazały efekt granicznie istotny (p ≈ 0.05) → przestrzenna zależność jest obecna, ale nie dominuje nad lokalnymi determinantami.
 
-Efekt przestrzenny istnieje, ale nie jest dominujący.
+Model SDM (Spatial Durbin Model):
+
+Uwzględnia wpływ zmiennych sąsiednich krajów oraz efekt globalny (rho).
+Zmienne przestrzenne nie były istotne statystycznie – wzrost zależy głównie od lokalnych cech.
+Brak autokorelacji reszt (Moran I ≈ 0.006; p = 0.43) – model dobrze dopasowany, nie pomija efektów przestrzennych.
+
+Model SEM (Spatial Error Model):
+
+Lambda (λ) ≈ 0.16, ale nieistotne statystycznie (p > 0.25) w testach LR, Wald i z-test.
+Brak potrzeby uwzględniania przestrzennej autokorelacji w błędach – zmienne wyjaśniające dobrze opisują zjawisko, a reszty nie są obciążone strukturą przestrzenną.
+
+Model SLX (Spatial Lag of X):
+
+Rozszerza klasyczny model OLS o zmienne objaśniające z sąsiednich krajów (np. Life_Exp_lag).
+W analizie żadna ze zmiennych przestrzennych (lagowanych) nie była istotna statystycznie (p > 0.1), co oznacza, że wpływ cech sąsiadów na wzrost PKB jest znikomy.
+Potwierdza dominację lokalnych czynników nad efektami otoczenia.
+
+Test Breuscha–Pagana (BP test) dla heteroskedastyczności:
+
+Statystyka testowa ≈ 1.13, p ≈ 0.77 – brak podstaw do odrzucenia hipotezy homoskedastyczności.
+Oznacza to, że wariancja reszt jest stała, a model nie cierpi na problem zmienności błędów.
 
 Model SDM (Durbin):
 
@@ -663,7 +793,11 @@ Uwzględnia zarówno wpływ sąsiadów (rho), jak i zmiennych objaśniających w
 
 Wnioski dla polityki publicznej / decyzji lokalnych:
 
-Skupienie się na jakości instytucji (praworządność) oraz inwestycjach w zdrowie i kapitał fizyczny powinno być priorytetem polityki rozwoju, choć efekt przestrzenny występuje, polityki narodowe są kluczowe – efekt otoczenia regionalnego jest ograniczony. Dla państw biedniejszych priorytetem powinna być polityka sprzyjająca konwergencji np. inwestycje w edukację, zdrowie, instytucje, a w regionach o słabszym rozwoju (np. Afryka Subsaharyjska) jest potrzeba polityk długofalowych, dostosowanych do barier strukturalnych.
+Wyniki analizy wskazują, że polityki publiczne powinny w pierwszej kolejności koncentrować się na wzmacnianiu jakości instytucji – w szczególności na poprawie praworządności – oraz na inwestycjach w zdrowie publiczne i kapitał fizyczny. Czynniki te wykazują istotny wpływ na dynamikę wzrostu gospodarczego.
+
+Chociaż zidentyfikowano występowanie efektów przestrzennych, ich natężenie jest umiarkowane, co sugeruje, że kluczowe znaczenie mają działania na poziomie krajowym. Szczególną uwagę należy zwrócić na państwa o niskim poziomie PKB w punkcie wyjściowym, dla których skuteczne mogą być strategie wspierające proces konwergencji, takie jak rozwój edukacji, poprawa funkcjonowania instytucji oraz inwestycje infrastrukturalne.
+
+W przypadku regionów zmagających się z trwałymi barierami rozwojowymi – jak Afryka Subsaharyjska – konieczne są długofalowe, spójne polityki rozwojowe dostosowane do uwarunkowań strukturalnych oraz specyficznych wyzwań społeczno-ekonomicznych.
 
 Krytyczna ocena ograniczeń danych i metod:
 
