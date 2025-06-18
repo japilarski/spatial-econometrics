@@ -1,7 +1,6 @@
 ---
 title: "Ekonometria Przestrzenna Projekt"
 author: ""
-date: "`r Sys.Date()`"
 output:
   html_document:
     toc: true
@@ -39,19 +38,33 @@ neighbors <- dnearneigh(coords, 0, 20)
 weights <- nb2listw(neighbors, style = "W", zero.policy = TRUE)
 ```
 
-``` {r }
-
-```
-
 
 # Wstęp
+Współczesna analiza zjawisk ekonomicznych coraz częściej wymaga uwzględnienia aspektu przestrzennego. Tradycyjne modele ekonometryczne, zakładające niezależność obserwacji, mogą prowadzić do błędnych wniosków, gdy dane wykazują autokorelację przestrzenną — sytuację, w której obserwacje geograficznie bliskie są do siebie bardziej podobne niż te oddalone. Ekonometria przestrzenna, jako rozwijająca się dziedzina, dostarcza narzędzi umożliwiających uchwycenie tych zależności i dokładniejsze modelowanie rzeczywistości.
+
+Celem niniejszego projektu jest zbadanie uwarunkowań wzrostu gospodarczego w krajach świata w latach 1960–1980 z wykorzystaniem metod ekonometrii przestrzennej. Zmienną zależną w analizie jest średnioroczny wzrost PKB per capita, natomiast zmiennymi objaśniającymi są m.in. przeciętna długość życia czy poziom inwestycji w kapitał nieprodukcyjny. Uwzględniono również aspekt regionalny w postaci binarnej zmiennej informującej o przynależności do regionu Afryki Subsaharyjskiej.
+
+W analizie wykorzystano zarówno klasyczne podejście modelowania (regresję OLS), jak i modele uwzględniające efekty przestrzenne (SAR, SEM). Przeprowadzono eksploracyjną analizę danych przestrzennych (ESDA), oceniono istnienie autokorelacji przestrzennej oraz porównano jakość dopasowania modeli. Szczególną uwagę poświęcono interpretacji wyników pod kątem ich znaczenia ekonomicznego i potencjalnych implikacji dla polityki publicznej.
+
 
 # Problem badawczy
+
+Celem niniejszej pracy jest empiryczna weryfikacja hipotezy, że tempo wzrostu gospodarczego krajów w latach 1960–1980 nie było przestrzennie losowe, lecz wykazywało istotne zróżnicowanie geograficzne wynikające zarówno z lokalnych uwarunkowań instytucjonalno-ekonomicznych, jak i efektów przestrzennych. Głównym problemem badawczym jest określenie, w jakim stopniu zmienne takie jak jakość instytucji prawnych, struktura inwestycji, poziom dochodu początkowego oraz przynależność regionalna wpływają na dynamikę wzrostu PKB, a także czy uwzględnienie zależności przestrzennych za pomocą modeli SAR i SEM istotnie poprawia wyjaśnianie zmienności tej dynamiki względem klasycznego modelu OLS. Kluczowym aspektem analizy jest identyfikacja obecności autokorelacji przestrzennej oraz ocena siły i zasięgu jej oddziaływania.
 
 # Przegląd literatury
 
 # Opis danych
+
+Analiza ekonometryczna opiera się na zestawie danych przekrojowych obejmujących wybrane kraje świata, dla których dostępne były informacje dotyczące zarówno wskaźników społeczno-ekonomicznych, jak i zmiennych przestrzennych. Dane dotyczą okresu od 1960 do 1980 roku i umożliwiają zbadanie uwarunkowań wzrostu gospodarczego w perspektywie długookresowej, z uwzględnieniem aspektów instytucjonalnych, inwestycyjnych oraz regionalnych.
+
+Zmienna zależna reprezentuje średnioroczny wzrost PKB per capita w latach 1960–1980. Wśród zmiennych objaśniających uwzględniono zarówno zmienne ilościowe, jak długość życia, udział inwestycji w kapitał nieprodukcyjny czy poziom zamożności początkowej, jak i zmienną jakościową informującą o przynależności danego kraju do regionu Afryki Subsaharyjskiej. Dane zostały uzupełnione o komponent przestrzenny w postaci informacji o sąsiedztwie geograficznym między państwami, co umożliwia estymację modeli uwzględniających zależności przestrzenne.
+
+W dalszej części rozdziału przedstawiono szczegółowy opis poszczególnych zmiennych, ich podstawowe statystyki opisowe oraz omówiono kwestie związane z brakami danych i potencjalnymi obserwacjami odstającymi
+
 ## Zmienna zależna
+
+Zmienną objaśnianą w niniejszej analizie jest średnioroczna stopa wzrostu produktu krajowego brutto (PKB) per capita w latach 1960–1980 (*gdp_growth_1960_1980*). Wybór tej zmiennej wynika z chęci zbadania długookresowych determinant wzrostu gospodarczego oraz ich potencjalnych zależności przestrzennych. Wskaźnik ten pozwala ocenić tempo rozwoju ekonomicznego poszczególnych krajów w badanym okresie oraz stanowi podstawę do identyfikacji wzorców przestrzennych i regionalnych różnic.
+
 ``` {r zmienna_zalezna}
 world <- ne_countries(scale = "medium", returnclass = "sf")
 world_merged <- world %>%
@@ -61,7 +74,7 @@ tmap_mode("view")
 tm_shape(world_merged) +
   tm_polygons("gdp_growth_1960_1980", 
               palette = "RdBu", 
-              title = "Średni wzrost PKB w latach 1960-1980") +
+              title = "Średnioroczny wzrost PKB w latach 1960-1980") +
   tm_layout(legend.outside = TRUE)
 
 ```
@@ -69,25 +82,23 @@ tm_shape(world_merged) +
 
 ## Zmienne objaśniające
 
+Zmiennymi objaśniającymi w modelu są wyselekcjonowane wskaźniki ekonomiczne, demograficzne i instytucjonalne, które zgodnie z literaturą przedmiotu mogą mieć istotny wpływ na tempo wzrostu gospodarczego. Uwzględniono zarówno zmienne ilościowe, takie jak przeciętna długość życia, poziom inwestycji nieinfrastrukturalnych, jakość instytucji prawnych oraz logarytm PKB per capita w roku 1960, jak i zmienną jakościową wskazującą na przynależność do regionu Afryki Subsaharyjskiej. Celem uwzględnienia tych zmiennych jest zbadanie ich siły oddziaływania oraz ewentualnej interakcji z efektami przestrzennymi.
+
 ### Zmienne ilościowe
-Life_Exp
-Średnia długość życia — przeciętna liczba lat, jaką statystycznie oczekuje się, że przeżyje osoba urodzona w danym kraju. Wysoka wartość zwykle wskazuje na lepszy poziom zdrowia i warunki życia.
+- Średnia długość życia (*Life_Exp*) — przeciętna liczba lat, jaką statystycznie oczekuje się, że przeżyje osoba urodzona w danym kraju. Wysoka wartość zwykle wskazuje na lepszy poziom zdrowia i warunki życia.
+- Procent wydatków nieprodukcyjnych (*NEquip_Inv*) - rozumiany jako wydatki inne niż w środki trwałe, np. kapitał ludzki, infrastruktura społeczna.
+- Indeks praworządności (*Rule_of_Law*) — mierzy stopień przestrzegania prawa, stabilność systemu prawnego oraz skuteczność wymiaru sprawiedliwości w danym kraju. Wyższe wartości oznaczają lepszą jakość instytucji i często korelują z wyższym rozwojem gospodarczym.
 
-NEquip_Inv
-Procent wydatków innych niż w środki trwałe, np. w kapitał ludzki, infrastrukturę społeczną.
-
-Rule_of_Law
-Indeks praworządności — mierzy stopień przestrzegania prawa, stabilność systemu prawnego oraz skuteczność wymiaru sprawiedliwości w danym kraju. Wyższe wartości oznaczają lepszą jakość instytucji i często korelują z wyższym rozwojem gospodarczym.
-
-GDPsh560
-Ilościowa zmienna ciągła wyrażająca logarytm naturalny PKB per capita w roku 1960. Wartości tej zmiennej odzwierciedlają poziom zamożności krajów w początkowym roku analizy. Dzięki logarytmicznej transformacji możliwe jest zmniejszenie wpływu wartości odstających oraz uzyskanie bardziej symetrycznego rozkładu, co sprzyja modelowaniu regresyjnemu. Wysokie wartości GDPsh560 oznaczają wyższy poziom dochodu per capita w 1960 r., co może mieć wpływ na tempo późniejszego rozwoju gospodarczego.
+- Logarytm naturalny PKB per capita w roku 1960 (*GDPsh560*) - wartości tej zmiennej odzwierciedlają poziom zamożności krajów w początkowym roku analizy. Dzięki logarytmicznej transformacji możliwe jest zmniejszenie wpływu wartości odstających oraz uzyskanie bardziej symetrycznego rozkładu, co sprzyja modelowaniu. Wysokie wartości GDPsh560 oznaczają wyższy poziom dochodu per capita w 1960 r., co może mieć wpływ na tempo późniejszego rozwoju gospodarczego.
 
 ### Zmienna jakościowa
-SubSahara
-Zmienna binarna oznaczająca, czy kraj znajduje się w regionie Afryki Subsaharyjskiej. Wpływa na analizę regionalną i często wiąże się z charakterystycznymi wyzwaniami gospodarczymi i społecznymi.
+Zmienna binarna oznaczająca, czy kraj znajduje się w regionie Afryki Subsaharyjskiej (*SubSahara*). Wpływa na analizę regionalną i często wiąże się z charakterystycznymi wyzwaniami gospodarczymi i społecznymi.
 
 
 ### Wybrane kartogramy
+
+W celu wizualnego zidentyfikowania przestrzennych wzorców badanych zjawisk, wykorzystano kartogramy ilustrujące rozmieszczenie zmiennych objaśniających. Graficzna reprezentacja danych w układzie geograficznym pozwala na wstępną ocenę potencjalnej autokorelacji przestrzennej oraz wskazuje na istnienie regionalnych skupisk o podobnych wartościach. Kartogramy stanowią istotny element eksploracyjnej analizy danych przestrzennych (ESDA), wspomagając interpretację wyników statystycznych i modelowych.
+
 ``` {r kartogramy}
 tm_shape(world_merged) +
   tm_polygons("Life_Exp", 
@@ -179,6 +190,9 @@ kable(head(neighbors_df, 10), caption = "Lista sąsiadów dla każdego kraju") %
 ```
 
 # Analiza opisowa
+
+Rozdział ten ma na celu wstępne zapoznanie się ze strukturą danych oraz identyfikację podstawowych charakterystyk statystycznych badanych zmiennych. Analiza opisowa obejmuje zarówno ocenę rozkładów zmiennych ilościowych, jak i obserwacji odstających, które mogą wpływać na wyniki dalszego modelowania. Obliczone zostaną klasyczne statystyki opisowe, takie jak średnia, mediana, wartości skrajne, odchylenie standardowe oraz współczynniki asymetrii. Uzupełnieniem analizy będą wykresy rozrzutu, histogramy i wykresy gęstości, które umożliwią lepsze zrozumienie rozkładu danych oraz potencjalnych zależności pomiędzy zmiennymi. Tak przeprowadzona analiza stanowi niezbędny etap przygotowawczy przed estymacją modeli ekonometrycznych.
+
 ## Zmienne ilościowe
 ``` {r }
 stats <- describe(dane[, c(
@@ -217,7 +231,7 @@ Ostatnia zmienna – jakość rządów prawa – mierzona w skali od 0 do 1, ma 
 
 ### Histogramy
 
-Histogramy czterech zmiennych ilościowych zawartych w zbiorze danych („Life_Exp”, „GDPsh560”, „NEquip_Inv” oraz „Rule_of_Law”) ujawniają istotne cechy rozkładu danych i pozwalają lepiej zrozumieć ich strukturę.
+Histogramy czterech zmiennych ilościowych zawartych w zbiorze danych ujawniają istotne cechy rozkładu danych i pozwalają lepiej zrozumieć ich strukturę.
 
 ``` {r wykresy}
 library(ggplot2)
@@ -235,18 +249,15 @@ histograms <- lapply(vars, function(var) {
 do.call(grid.arrange, c(histograms, ncol = 2))
 ```
 
+Zmienna *Life_Exp* wykazuje rozkład wielomodalny — widać wyraźne skupiska obserwacji w okolicach 45–50 oraz 65–70 lat. Sugeruje to, że dane mogą pochodzić z krajów o bardzo zróżnicowanym poziomie rozwoju, przy czym kraje rozwinięte i rozwijające się tworzą odrębne grupy pod względem długości życia.
 
+Zmienna *GDPsh560*, czyli logarytm PKB per capita z 1960 roku, ma rozkład zbliżony do normalnego, chociaż z lekką lewostronną skośnością. Większość obserwacji skupia się w przedziale 7–8, co może oznaczać, że znaczna liczba krajów miała umiarkowany poziom dochodu, a jedynie niewielka liczba krajów cechowała się bardzo niskim PKB.
 
-Zmienna Life_Exp (oczekiwana długość życia) wykazuje rozkład wielomodalny — widać wyraźne skupiska obserwacji w okolicach 45–50 oraz 65–70 lat. Sugeruje to, że dane mogą pochodzić z krajów o bardzo zróżnicowanym poziomie rozwoju, przy czym kraje rozwinięte i rozwijające się tworzą odrębne grupy pod względem długości życia.
+W przypadku zmiennej *NEquip_Inv* rozkład jest rozproszony, z wyraźnym skupiskiem między 10 a 20 procentami. Występuje delikatna prawostronna skośność, co może mieć znaczenie przy dalszym modelowaniu — w razie potrzeby warto rozważyć transformację tej zmiennej.
 
-Zmienna GDPsh560, czyli logarytm PKB per capita z 1960 roku, ma rozkład zbliżony do normalnego, chociaż z lekką lewostronną skośnością. Większość obserwacji skupia się w przedziale 7–8, co może oznaczać, że znaczna liczba krajów miała umiarkowany poziom dochodu, a jedynie niewielka liczba krajów cechowała się bardzo niskim PKB.
-
-W przypadku zmiennej NEquip_Inv (procent wydatków innych niż w środki trwałe) rozkład jest rozproszony, z wyraźnym skupiskiem między 10 a 20 procentami. Występuje delikatna prawostronna skośność, co może mieć znaczenie przy dalszym modelowaniu — w razie potrzeby warto rozważyć transformację tej zmiennej.
-
-Ostatnia zmienna, Rule_of_Law (wskaźnik rządów prawa), ma wyraźnie skośny rozkład, z dużą liczbą obserwacji skupionych na wartościach 0 i 1. Może to sugerować, że wskaźnik ten przyjmuje w praktyce charakter quasi-dyskretny, co odzwierciedla skrajne różnice w poziomie jakości instytucji między krajami.
+Ostatnia zmienna, *Rule_of_Law* , ma wyraźnie skośny rozkład, z dużą liczbą obserwacji skupionych na wartościach 0 i 1. Może to sugerować, że wskaźnik ten przyjmuje w praktyce charakter quasi-dyskretny, co odzwierciedla skrajne różnice w poziomie jakości instytucji między krajami.
 
 Na podstawie tej analizy można stwierdzić, że zmienne reprezentują różnorodne rozkłady, co może mieć wpływ na dalsze analizy statystyczne i modelowanie ekonometryczne. 
-
 
 ### Wykresy gęstości
 
@@ -271,10 +282,10 @@ ggplot(dane_long, aes(x = Wartość, fill = Zmienna)) +
 ```
 
 Wykresy gęstości przedstawiają rozkład czterech zmiennych ilościowych w zbiorze danych.
-Zmienna Life_Exp prezentuje rozkład dwumodalny, w próbie występują dwie grupy krajów o wyraźnie różnych długościach życia.
-Dla GDPsh560 widzimy rozkład lekko asymetryczny z przewagą krajów o średnich wartościach logarytmu PKB. Wskazuje na nierównomierny poziom rozwoju gospodarczego.
-Z kolei rozkład NEquip_Inv jest zbliżony do normalnego, wskazujący na względnie równomierne rozłożenie wartości w próbie.
-Zmienna Rule_of_Law prezentuje rozkład zbliżony do dwumodalnego, sugeruje pewne zróżnicowanie między krajami pod względem siły rządów prawa, z koncentracją przy niskich i wysokich wartościach.
+Zmienna *Life_Exp* prezentuje rozkład dwumodalny, w próbie występują dwie grupy krajów o wyraźnie różnych długościach życia.
+Dla *GDPsh560* widzimy rozkład lekko asymetryczny z przewagą krajów o średnich wartościach logarytmu PKB. Wskazuje na nierównomierny poziom rozwoju gospodarczego.
+Z kolei rozkład *NEquip_Inv* jest zbliżony do normalnego, wskazujący na względnie równomierne rozłożenie wartości w próbie.
+Zmienna *Rule_of_Law* prezentuje rozkład zbliżony do dwumodalnego, sugeruje pewne zróżnicowanie między krajami pod względem siły rządów prawa, z koncentracją przy niskich i wysokich wartościach.
 
 ### Korelacja zmiennych ilościowych 
 
@@ -291,8 +302,8 @@ kable(cor_matrix, digits = 3, caption = "Macierz korelacji") %>%
   kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = F)
 ```
 
-Analiza macierzy korelacji wykazała istotne powiązania między badanymi zmiennymi ilościowymi. Oczekiwana długość życia (Life_Exp) jest silnie skorelowana dodatnio z PKB per capita (GDPsh560) oraz wskaźnikiem praworządności (Rule_of_Law), odpowiednio na poziomie 0,859 oraz 0,711. Oznacza to, że wyższy poziom dochodu na mieszkańca oraz lepsza jakość instytucji i rządów są związane z dłuższą średnią długością życia ludności.
-Udział wydatków innych niż na środki trwałe, takich jak inwestycje w kapitał ludzki czy infrastrukturę społeczną (NEquip_Inv), wykazuje umiarkowaną dodatnią korelację z oczekiwaną długością życia (0,456) oraz umiarkowane powiązania z pozostałymi zmiennymi. Sugeruje to, że tego typu nakłady również mają pozytywny wpływ na warunki życia, choć związek ten jest słabszy niż w przypadku PKB czy praworządności.
+Analiza macierzy korelacji wykazała istotne powiązania między badanymi zmiennymi ilościowymi. Oczekiwana długość życia (*Life_Exp*) jest silnie skorelowana dodatnio z PKB per capita (*GDPsh560*) oraz wskaźnikiem praworządności (*Rule_of_Law*), odpowiednio na poziomie 0,859 oraz 0,711. Oznacza to, że wyższy poziom dochodu na mieszkańca oraz lepsza jakość instytucji i rządów są związane z dłuższą średnią długością życia ludności.
+Udział wydatków innych niż na środki trwałe, takich jak inwestycje w kapitał ludzki czy infrastrukturę społeczną (*NEquip_Inv*), wykazuje umiarkowaną dodatnią korelację z oczekiwaną długością życia (*0,456*) oraz umiarkowane powiązania z pozostałymi zmiennymi. Sugeruje to, że tego typu nakłady również mają pozytywny wpływ na warunki życia, choć związek ten jest słabszy niż w przypadku PKB czy praworządności.
 Podsumowując, wyniki potwierdzają, że poziom dochodu oraz stan instytucji są silnie powiązane a jakością życia, a inwestycje w kapitał ludzki i infrastrukturę społeczną również mogą wspierać poprawę warunków życia, choć w mniejszym stopniu.
 
 ## Zmienna jakościowa
@@ -316,17 +327,15 @@ dane %>%
     position = "center"
   )
 ```
-Zmienna SubSahara dzieli analizowane państwa na dwie grupy: należące do regionu Afryki Subsaharyjskiej (1) oraz pozostałe (0). W zestawieniu danych:
+Zmienna *SubSahara* dzieli analizowane państwa na dwie grupy: należące do regionu Afryki Subsaharyjskiej (1) oraz pozostałe (0). W zestawieniu danych:
 80,6% państw (54 obserwacje) nie należy do Afryki Subsaharyjskiej, natomiast 19,4% państw (13 obserwacji) pochodzi z tego regionu.
 Taki rozkład wskazuje na znaczną przewagę państw spoza Afryki Subsaharyjskiej w analizowanej próbie, co warto uwzględnić przy interpretacji wyników modeli przestrzennych czy statystyk opisowych. 
 
 
-
-### zmienne jakościowe
-``` {r zmienne_jakosc}
-```
-
 # Eksploracyjna analiza danych przestrzennych 
+
+Celem niniejszego rozdziału jest identyfikacja oraz wstępne zrozumienie przestrzennych zależności i wzorców występujących w badanym zbiorze danych. Eksploracyjna analiza danych przestrzennych (ESDA) stanowi kluczowy etap w analizie ekonomicznej zjawisk geograficznych, umożliwiając ocenę siły i charakteru przestrzennej autokorelacji przed przystąpieniem do estymacji modeli przestrzennych.
+W pierwszej kolejności obliczony zostanie globalny wskaźnik autokorelacji przestrzennej Morana (Moran’s I) dla zmiennej zależnej, co pozwoli ocenić, czy wartości wzrostu PKB per capita wykazują tendencję do grupowania się przestrzennego. Następnie oszacowany zostanie klasyczny model liniowy (OLS), a jego reszty poddane zostaną analizie pod kątem przestrzennej autokorelacji — ponownie z wykorzystaniem testu Morana. W dalszej części przeprowadzone zostaną testy Lagrange’a (LM i LM-robust), które wskazują na adekwatność zastosowania modeli przestrzennych (SAR lub SEM). Rozdział zamyka analiza lokalnych wskaźników autokorelacji przestrzennej (LISA), których wyniki zostaną również zaprezentowane w formie graficznej. Umożliwia to identyfikację lokalnych skupisk (hot spots i cold spots) oraz obserwacji odstających pod względem przestrzennym.
 
 ## Test Moran I
 
@@ -334,6 +343,7 @@ W celu sprawdzenia istnienia przestrzennej autokorelacji tempa wzrostu PKB per c
 
 ``` {r moran_I_test}
 moran_result <- moran.test(dane$gdp_growth_1960_1980, weights, zero.policy = TRUE)
+moran_result
 ```
 
 Wynik testu Morana dla zmiennej gdp_growth_1960_1980 wyniósł I = 0.664, przy oczekiwanej wartości statystyki pod hipotezą braku autokorelacji równej –0.016 oraz bardzo niskim poziomie wartości p (< 2.2e-16). Tak wysoka wartość statystyki Morana oraz istotność testu wskazują jednoznacznie na silnie dodatnią przestrzenną autokorelację wzrostu PKB – kraje o podobnych wynikach wzrostu gospodarczego były skupione geograficznie.
@@ -342,7 +352,10 @@ Taki wynik potwierdza, że przestrzenne rozmieszczenie danych ma znaczenie anali
 
 ## Model linowy
 
-``` {r statistically_important_model }
+W celu zbadania czynników wpływających na wzrost PKB per capita w latach 1960–1980 skonstruowano model regresji liniowej. Zmienną objaśnianą jest gdp_growth_1960_1980, natomiast zmiennymi objaśniającymi są:
+Model tłumaczy około 70% zmienności wzrostu PKB per capita (R² = 0.7005), co wskazuje na dobr3 dopasowanie. Wszystkie zmienne są statystycznie istotne na poziomie istotności większym niż 0.01.
+
+``` {r statistically_important_model}
 model_reduced <- lm(
   gdp_growth_1960_1980 ~
     Life_Exp + 
@@ -352,15 +365,25 @@ model_reduced <- lm(
     SubSahara,
   data = dane
 )
-```
-W celu zbadania czynników wpływających na wzrost PKB per capita w latach 1960–1980 skonstruowano model regresji liniowej. Zmienną objaśnianą jest gdp_growth_1960_1980, natomiast zmiennymi objaśniającymi są:
-Model tłumaczy około 70% zmienności wzrostu PKB per capita (R² = 0.7005), co wskazuje na dobr3 dopasowanie. Wszystkie zmienne są statystycznie istotne na poziomie istotności większym niż 0.01.
+coef_table <- data.frame(
+  Zmienna = c("Intercept", "Life_Exp", "GDPsh560", "NEquip_Inv", "Rule_of_Law", "SubSahara"),
+  Współczynnik = c(10.69607, 0.10593, -2.23097, 0.07501, 2.65482, -2.25614),
+  Interpretacja = c(
+    "Wartość średniorocznego wzrostu PKB przy zerowych wartościach zmiennych objaśniających",
+    "Każdy dodatkowy rok życia zwiększa wzrost PKB o ok. 0.11 punktu procentowego",
+    "Wyższy poziom PKB per capita w 1960 r. koreluje z niższym tempem wzrostu (efekt doganiania)",
+    "Większy udział wydatków innych niż środki trwałe wiąże się z nieznacznym wzrostem wzrostu PKB",
+    "Lepszy indeks praworządności sprzyja wyższemu tempu wzrostu gospodarczego",
+    "Kraje Afryki Subsaharyjskiej mają średnio niższe tempo wzrostu PKB o około 2.26 punktu procentowego"
+  )
+)
 
-Dłuższe życie w populacji jest pozytywnie skorelowane ze wzrostem gospodarczym — każdy dodatkowy rok życia zwiększa wzrost PKB per capita o ok. 0.106 punktu procentowego.
-Wyższy poziom PKB per capita w 1960 roku wiąże się z niższym tempem wzrostu w kolejnych dekadach, co sugeruje efekt doganiania (catch-up effect).
-Większy udział wydatków inwestycyjnych przeznaczonych na elementy inne niż środki trwałe (np. zasoby ludzkie, badania i rozwój) wiąże się z większym wzrostem gospodarczym. Wzrost tego udziału o 1 punkt procentowy przekłada się na wzrost PKB per capita o ok. 0.075 punktu.
-Silniejsze rządy prawa mają pozytywny wpływ na wzrost gospodarczy.
-Kraje Afryki Subsaharyjskiej odnotowały istotnie niższy wzrost gospodarczy w badanym okresie, co może odzwierciedlać zarówno czynniki historyczne, jak i strukturalne.
+kable(coef_table, 
+      col.names = c("Zmienna", "Współczynnik", "Interpretacja"), 
+      caption = "Wyniki estymacji klasycznego modelu liniowego (OLS)")
+
+```
+
 
 Model wskazuje na istotną rolę kapitału ludzkiego, rządów prawa oraz poziomu wyjściowego rozwoju w kształtowaniu wzrostu gospodarczego w krajach świata w latach 1960–1980.
 
@@ -439,28 +462,13 @@ Wyniki lokalnego wskaźnika Morana zostały poddane testowi istotności statysty
 
 Na wykresie wyraźnie widać gorące skupisko w rejonie europy oraz zimne w Afryce. W rejonie azji wschodniej widoczna jest dominuja państwa o charakterze High-Low, wynika to z fakty bardzo słabego średniego wzrostu gospodarczego na Filipinach. W Ameryce południowej przeplatają się wszystkie typy obszarów.   
 
-## Klasyczny model OLS
+# Modelowanie ekonometryczne
 
-Klasyczny model OLS pełni w analizie przestrzennej rolę punktu odniesienia. Pozwala określić, czy istnieje zależność między badanymi zmiennymi bez uwzględnienia wpływu przestrzennego. Służy on do ocenienia podstawowej struktury zależności, sprawdzenia, które zmienne sa istotne w modelu nieprzestrzennym oraz do porówanania dopasowaina i istotności wyników z modelami przestrzennymi (SAM i SEM), które zostaną przedstawione w późniejszym punkcie. 
-Porównanie  modelu OLS z modelami przestrzennymi pozwoli ustalić, czy uwzględnienie efektów przestrzennych poprawi jakość modelu.
+Celem niniejszego rozdziału jest oszacowanie oraz porównanie dwóch podejść do modelowania zmiennej zależnej – klasycznego modelu regresji liniowej (OLS) oraz modelu przestrzennego SAR (Spatial Autoregressive Model). Wybór tych modeli umożliwia ocenę, na ile pominięcie zależności przestrzennych może prowadzić do błędnej specyfikacji modelu oraz zaniżenia precyzji estymacji parametrów.
 
-``` {r klasyczny model OLS}
+Model OLS stanowi punkt wyjścia dla dalszych analiz i pozwala na identyfikację podstawowych zależności pomiędzy zmiennymi objaśniającymi a tempem wzrostu PKB per capita. W kolejnym kroku zastosowano model SAR, który uwzględnia efekt przestrzennie opóźnionej zmiennej objaśnianej, pozwalając na uchwycenie wpływu wartości zmiennej zależnej w sąsiednich jednostkach terytorialnych. Ujęcie to znajduje uzasadnienie w wynikach wcześniejszych testów autokorelacji przestrzennej (Moran’s I), które wskazują na istotne przestrzenne współzależności.
 
-ols_model <- lm(gdp_growth_1960_1980 ~ Life_Exp + NEquip_Inv + Rule_of_Law + GDPsh560
-                + SubSahara,
-                data = world_merged)
-
-summary(ols_model)
-```
-Model OLS został oszacowany w celu zbadania czynników wpływających na średni wzrost PKB w latach 1960–1980. Wyniki wskazują, że wszystkie uwzględnione zmienne są statystycznie istotne (p < 0.05), a dopasowanie modelu jest wysokie (R² = 0.724).
-
-Life_Exp (średnia długość życia): ma istotny dodatni wpływ na wzrost gospodarczy. Sugeruje to, że wyższy poziom zdrowia i warunków życia sprzyja rozwojowi gospodarczemu.
-
-NEquip_Inv (wydatki inne niż w środki trwałe): również wpływa pozytywnie – inwestycje w kapitał ludzki i infrastrukturę społeczną mogą stymulować wzrost.
-
-Rule_of_Law (praworządność): istotny pozytywny wpływ sugeruje, że lepsze instytucje i stabilność prawna wspierają rozwój gospodarczy.
-
-GDPsh560 (PKB per capita w 1960): wykazuje istotny negatywny wpływ, co można interpretować jako efekt doganiania – kraje biedniejsze w 1960 rozwijały się szybciej.
+Porównanie obu modeli pozwala określić, w jakim stopniu uwzględnienie efektów przestrzennych wpływa na trafność i wiarygodność wniosków ekonomicznych.
 
 ## Model przestrzenny SAR
 
@@ -567,7 +575,14 @@ moran.plot(residuals_sar, lw, labels = world_merged$admin,
            main = "Moran 1 Plot dla reszt modelu SAR")
 
 ```
-# Test Breush-Pagan
+
+# Ocena modelu
+
+W rozdziale tym dokonana zostanie szczegółowa ocena jakości i adekwatności estymowanych modeli ekonometrycznych, z uwzględnieniem specyfiki danych przestrzennych. Kluczowym elementem jest weryfikacja założeń klasycznego modelu regresji, m.in. homoskedastyczności reszt, której naruszenie może prowadzić do niewiarygodnych wniosków. W tym celu przeprowadzony zostanie test Breusch-Pagana, pozwalający wykryć ewentualną heteroskedastyczność.
+
+Ponadto rozważone zostaną modele przestrzenne SEM (Spatial Error Model), SLX (Spatial Lag of X Model) oraz model Durbin, które rozszerzają klasyczne podejście o różne mechanizmy zależności przestrzennych — odpowiednio błędu modelu, zmiennych objaśniających oraz ich opóźnień przestrzennych. Ocena modeli obejmie porównanie ich dopasowania oraz interpretację parametrów, co pozwoli na wskazanie najtrafniejszego opisu analizowanego zjawiska.
+
+## Test Breush-Pagan
 
 Breusch-Pagan Test (BP Test) – bada liniową formę heteroskedastyczności na resztach z modelu.
 H0: Homoskedastyczność (stała wariancja błędu)
@@ -576,6 +591,11 @@ H1: Heteroskedastyczność (wariancja zależna od regresorów)
 ``` {r Breush-Pagan Test dla OLS}
 
 library(lmtest)
+
+ols_model <- lm(gdp_growth_1960_1980 ~ Life_Exp + NEquip_Inv + Rule_of_Law + GDPsh560
+                + SubSahara,
+                data = world_merged)
+
 bptest(ols_model)
 
 ```
@@ -588,9 +608,9 @@ Ponieważ wartość p = 0,0466 jest mniejsza niż 0,05, odrzucamy hipotezę zero
 
 Test Breuscha–Pagana wskazuje na obecność ogólnej heteroskedastyczności w modelu — oznacza to, że wariancja reszt nie jest stała i zmienia się w zależności od wartości zmiennych objaśniających. Z kolei test Morana I nie wykazuje przestrzennej autokorelacji reszt, co oznacza brak przestrzennego skupiania się dużych lub małych wartości reszt, czyli brak przestrzennej heteroskedastyczności. Wyniki obu testów się nie wykluczają — przeciwnie, są komplementarne: model cierpi na ogólną heteroskedastyczność, ale dobrze uwzględnia przestrzenną strukturę danych.
 
-# Model SEM
+## Model SEM
 
-Model to błędny model autoregresji przestrzennej (SEM) — czyli zakładamy, że zależności przestrzenne są zawarte w składniku losowym (błędzie modelu), a nie bezpośrednio w zmiennej zależnej.
+Jest to błędny model autoregresji przestrzennej (SEM) — czyli zakładamy, że zależności przestrzenne są zawarte w składniku losowym (błędzie modelu), a nie bezpośrednio w zmiennej zależnej.
 
 ``` {r model SEM}
 
@@ -647,7 +667,7 @@ Jeśli różnica jest niewielka lub model przestrzenny ma wyższe AIC, może to 
 
 Parametr przestrzenny lambda w modelu SEM jest nieistotny (p = 0.28), parametr rho w modelu SAR także jest nieistotny (p = 0.54), co potwierdza, że efekty przestrzenne są słabe lub niewielkie.
 
-# Model SLX
+## Model SLX
 
 Model SLX (Spatial Lag of X) służy do badania, czy zmienne objaśniające w sąsiednich jednostkach przestrzennych (np. powiatach, krajach) mają wpływ na wartość zmiennej zależnej w danej jednostce. Pozwala więc uwzględnić tzw. przestrzenny rozlew efektów – np. czy inwestycje w regionach sąsiednich wpływają na lokalny wzrost gospodarczy. W przeciwieństwie do modeli SAR i SEM, SLX nie zakłada zależności przestrzennych w samej zmiennej zależnej ani w resztach, lecz tylko w zmiennych objaśniających. Jest to model przydatny przy ocenie polityk publicznych i lokalnych efektów sąsiedztwa.
 
@@ -739,8 +759,8 @@ moran.plot(residuals_durbin, lw, labels = world_merged$admin,
            main = "Moran 1 Plot dla reszt modelu SDM")
 
 ```
-## Wnioksi i rekonedacje
 
+# Wnioksi i rekonedacje
 
 Kluczowe czynniki wpływające na wzrost gospodarczy
 
