@@ -578,7 +578,6 @@ H1: Heteroskedastyczność (wariancja zależna od regresorów)
 library(lmtest)
 bptest(ols_model)
 
-
 ```
 
 Statystyka testowa (BP) = 11,252
