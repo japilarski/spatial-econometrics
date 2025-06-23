@@ -1,0 +1,19 @@
+p {
+  text-align: justify;
+}
+
+p.caption {
+  text-align: center;
+}
+
+caption {
+  text-align: center;
+}
+
+li {
+  text-align: justify;
+}
+
+ol li {
+  text-align: left;
+}

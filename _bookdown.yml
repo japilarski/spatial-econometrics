@@ -1,0 +1,6 @@
+language:
+  label:
+    fig: 'Rysunek '
+    tab: 'Tabela '
+  ui:
+    chapter_name: 'Rozdział '
